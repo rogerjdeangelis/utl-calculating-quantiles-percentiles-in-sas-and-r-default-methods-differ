@@ -1,10 +1,6 @@
-# utl-calculating-quantiles-percentiles-in-sas-and-r-default-methods-differ
-Calculating quantiles in sas and r default methods differ 
     %let pgm=utl-calculating-quantiles-percentiles-in-sas-and-r-default-methods-differ;
 
     Calculating quantiles in sas and r default methods differ
-
-    SQL is not well suited for this kind of problem.
 
     Default methods differ between software: SAS uses Type 2 quantiles by default, while R uses Type 7.
 
@@ -24,7 +20,18 @@ Calculating quantiles in sas and r default methods differ
 
      SOLUTIONS
        1 sas univariate type=2
+
        2 r quantile type=2
+
+       3 r sql ntiles method
+         (not applicable for small samples)
+         When there are fewer rows than buckets:
+         NTILE() will assign each row to a unique bucket,
+         starting from 1, up to the number of rows2.
+         The remaining bucket numbers will not be used.
+         Does not do interpolation?
+
+       4 python sql ntile method
 
 
     /*               _     _
@@ -39,7 +46,7 @@ Calculating quantiles in sas and r default methods differ
     /*                        |                                                 |                                             */
     /*      INPUT             |          PROCESS                                |                                             */
     /*                        |                                                 |                                             */
-    /*  Thee Datasets         | SAS Solution                                    |                                             */
+    /*  Thee Datasets         | SAS Solution                                    | SAS UNIVARIATE                              */
     /*                        |                                                 |                                             */
     /*                        |                                                 |                                             */
     /*  SD1.DF1 total obs=3   | Append with a view                              | WORK.STATS total obs=3                      */
@@ -65,7 +72,7 @@ Calculating quantiles in sas and r default methods differ
     /*    92     0.10         |  format P_2_5 P_97_5 8.4;                       |                                             */
     /*    92    -0.10         | run;quit;                                       |                                             */
     /*    92     0.85         |                                                 |                                             */
-    /*                        |                                                 |                                             */
+    /*                        |-------------------------------------------------|---------------------------------------------*/
     /*                        |                                                 |                                             */
     /*                        |  R                                              | R                                           */
     /*                        |                                                 |                                             */
@@ -95,6 +102,36 @@ Calculating quantiles in sas and r default methods differ
     /*                        |                                                 |                                             */
     /*                        |  proc print data=sd1.want;                      |                                             */
     /*                        |  run;quit;                                      |                                             */
+    /*                        |                                                 |                                             */
+    /* -------------------------------------------------------------------------|---------------------------------------------*/
+    /*                        |                                                 |                                             */
+    /*     INPUT              | R AND PYTHON SQL NTILES                         |   R                                         */
+    /*     =====              | =======================                         |   =                                         */
+    /*                        |                                                 |                                             */
+    /* %let rows=1000;        | select                                          |   rownum   percentile    Value              */
+    /*                        |     rownum                                      |                                             */
+    /* data sd1.have;         |    ,case (ntile(0.025*&rows) over (order by x)) |       25    lower  2.5   0.02525            */
+    /* call streaminit(12345);|       when 1 then 'lower  2.5'                  |      975    upper 97.5   0.97521            */
+    /*   do z=1 to &rows;     |       when 2 then 'upper 97.5'                  |                                             */
+    /*     x= (z + .4 *       |       else ''                                   |   SAS UNIVARIATE                            */
+    /*  rand('uniform'))/1000;|     end as percentile                           |   ==============                            */
+    /*     output;            |    ,x                                           |    avg         p_2_5      p_97_5            */
+    /*   end;                 | from                                            |                                             */
+    /* run;quit;              |     (select                                     |   0.50070      0.0252      0.9752           */
+    /*                        |        x                                        |                                             */
+    /* Obs        x           |       ,row_number()                             |                                             */
+    /*                        |     over                                        |                                             */
+    /*   1    0.00123         |        (order by x) as rownum                   |                                             */
+    /*   2    0.00239         |     from have                                   |                                             */
+    /*   3    0.00323         |     )                                           |                                             */
+    /* ...                    | where                                           |                                             */
+    /* 998    0.99816         |       rownum = cast((0.025*&rows) as integer)   |                                             */
+    /* 999    0.99938         |    or rownum = cast((0.975*&rows) as integer)   |                                             */
+    /*1000    1.00031         |                                                 |                                             */
+    /*                        |                                                 |                                             */
+    /*                        |                                                 |                                             */
+    /*                        |                                                 |                                             */
+    /*                        |                                                 |                                             */
     /*                        |                                                 |                                             */
     /**************************************************************************************************************************/
 
@@ -130,27 +167,27 @@ Calculating quantiles in sas and r default methods differ
     run;quit;
 
     /**************************************************************************************************************************/
-    /*                                                                                                                        */
-    /*      INPUT                                                                                                             */
-    /*                                                                                                                        */
-    /*  Thee Datasets                                                                                                         */
-    /*                                                                                                                        */
-    /*                                                                                                                        */
-    /*  SD1.DF1 total obs=3   SD1.DF2 total obs=3   SD1.DF3 total obs=3                                                       */
-    /*                                                                                                                        */
-    /*   CNN      CS           CNN     CS            CNN      CS                                                              */
-    /*                                                                                                                        */
-    /*    90     0.01           91     0.2            92     0.10                                                             */
-    /*    90    -0.01           91    -0.2            92    -0.10                                                             */
-    /*    90     0.06           91     0.8            92     0.85                                                             */
-    /*                                                                                                                        */
-    /**************************************************************************************************************************/
+    /*                      |                      |                                                                          */
+    /*      INPUT           |                      |                                                                          */
+    /*                      |                      |                                                                          */
+    /*  Thee Datasets       |                      |                                                                          */
+    /*                      |                      |                                                                          */
+    /*                      |                      |                                                                          */
+    /*  SD1.DF1 total obs=3 |  SD1.DF2 total obs=3 |  SD1.DF3 total obs=3                                                     */
+    /*                      |                      |                                                                          */
+    /*   CNN      CS        |   CNN     CS         |   CNN      CS                                                            */
+    /*                      |                      |                                                                          */
+    /*    90     0.01       |    91     0.2        |    92     0.10                                                           */
+    /*    90    -0.01       |    91    -0.2        |    92    -0.10                                                           */
+    /*    90     0.06       |    91     0.8        |    92     0.85                                                           */
+    /*                      |                      |                                                                          */
+    /***********************|**********************|*****************************************************************************/
 
-    /*                              _                 _       _
-    / | ___  __ _ ___   _   _ _ __ (_)_   ____ _ _ __(_) __ _| |_ ___
-    | |/ __|/ _` / __| | | | | `_ \| \ \ / / _` | `__| |/ _` | __/ _ \
-    | |\__ \ (_| \__ \ | |_| | | | | |\ V / (_| | |  | | (_| | ||  __/
-    |_||___/\__,_|___/  \__,_|_| |_|_| \_/ \__,_|_|  |_|\__,_|\__\___|
+    /*                               _                 _       _
+    / |  ___  __ _ ___   _   _ _ __ (_)_   ____ _ _ __(_) __ _| |_ ___
+    | | / __|/ _` / __| | | | | `_ \| \ \ / / _` | `__| |/ _` | __/ _ \
+    | | \__ \ (_| \__ \ | |_| | | | | |\ V / (_| | |  | | (_| | ||  __/
+    |_| |___/\__,_|___/  \__,_|_| |_|_| \_/ \__,_|_|  |_|\__,_|\__\___|
 
     */
 
@@ -220,14 +257,167 @@ Calculating quantiles in sas and r default methods differ
     run;quit;
 
     /**************************************************************************************************************************/
-    /*                                                                                                                        */
-    /*  R                                              SAS                 value_    lower_    upper_                         */
-    /*      CNN value_mean lower_bound upper_bound     rownames    CNN      mean      bound     bound                         */
-    /*                                                                                                                        */
-    /*  1    90      0.02        -0.01        0.06         1        90    0.02000     -0.01     0.06                          */
-    /*  2    91      0.267       -0.2         0.8          2        91    0.26667     -0.20     0.80                          */
-    /*  3    92      0.283       -0.1         0.85         3        92    0.28333     -0.10     0.85                          */
-    /*                                                                                                                        */
+    /*                                              |                                                                         */
+    /*  R                                           |  SAS                 value_    lower_    upper_                         */
+    /*      CNN value_mean lower_bound upper_bound  |  rownames    CNN      mean      bound     bound                         */
+    /*                                              |                                                                         */
+    /*  1    90      0.02        -0.01        0.06  |      1        90    0.02000     -0.01     0.06                          */
+    /*  2    91      0.267       -0.2         0.8   |      2        91    0.26667     -0.20     0.80                          */
+    /*  3    92      0.283       -0.1         0.85  |      3        92    0.28333     -0.10     0.85                          */
+    /*                                              |                                                                         */
+    /**************************************************************************************************************************/
+
+    /*____                    _         _   _ _
+    |___ /   _ __   ___  __ _| |  _ __ | |_(_) | ___  ___
+      |_ \  | `__| / __|/ _` | | | `_ \| __| | |/ _ \/ __|
+     ___) | | |    \__ \ (_| | | | | | | |_| | |  __/\__ \
+    |____/  |_|    |___/\__, |_| |_| |_|\__|_|_|\___||___/
+     _                   _ |_|
+    (_)_ __  _ __  _   _| |_
+    | | `_ \| `_ \| | | | __|
+    | | | | | |_) | |_| | |_
+    |_|_| |_| .__/ \__,_|\__|
+            |_|
+    */
+
+    %let rows=1000;
+
+    options validvarname=v7;
+    libname sd1 "d:/sd1";
+    data sd1.have;
+      call streaminit(12345);
+      do z=1 to &rows;
+        x= (z + .4 * rand('uniform'))/1000;
+        output;
+      end;
+    run;quit;
+
+    /*
+     _ __  _ __ ___   ___ ___  ___ ___
+    | `_ \| `__/ _ \ / __/ _ \/ __/ __|
+    | |_) | | | (_) | (_|  __/\__ \__ \
+    | .__/|_|  \___/ \___\___||___/___/
+    |_|
+    */
+
+    %utl_rbeginx;
+    parmcards4;
+    library(haven)
+    library(sqldf)
+    source("c:/oto/fn_tosas9x.R")
+    have<-read_sas("d:/sd1/have.sas7bdat")
+    want<-sqldf("
+      select
+          rownum
+         ,case (ntile(0.025*&rows) over (order by x))
+            when 1 then 'lower  2.5'
+            when 2 then 'upper 97.5'
+            else ''
+          end as percentile
+         ,x
+      from
+          (select
+             x
+            ,row_number()
+          over
+             (order by x) as rownum
+          from have
+          )
+      where
+            rownum = cast((0.025*&rows) as integer)
+         or rownum = cast((0.975*&rows) as integer)
+    ")
+    want
+    fn_tosas9x(
+          inp    = want
+         ,outlib ="d:/sd1/"
+         ,outdsn ="rsqlwant"
+         )
+    ;;;;
+    %utl_rendx;
+
+    proc print data=sd1.rsqlwant;
+    run;quit;
+
+
+    /*           _                 _       _              _               _
+     _   _ _ __ (_)_   ____ _ _ __(_) __ _| |_ ___    ___| |__   ___  ___| | __
+    | | | | `_ \| \ \ / / _` | `__| |/ _` | __/ _ \  / __| `_ \ / _ \/ __| |/ /
+    | |_| | | | | |\ V / (_| | |  | | (_| | ||  __/ | (__| | | |  __/ (__|   <
+     \__,_|_| |_|_| \_/ \__,_|_|  |_|\__,_|\__\___|  \___|_| |_|\___|\___|_|\_\
+
+    */
+
+
+    ods output quantiles=sd1.quants;
+    proc univariate data=sd1.have pctldef=2;
+      output out=stats mean=avg pctlpts=2.5 97.5
+       pctlpre=p_;
+    run;quit;
+
+    proc print data=stats;
+     format P_2_5 P_97_5 8.4;
+    run;quit;
+
+    /**************************************************************************************************************************/
+    /*                                 |                                                                                      */
+    /*  R BTILES                       |  SAS UNIVARIATE                                                                      */
+    /*                                 |                                                                                      */
+    /*  rownum    x       percentile   |   avg         p_2_5      p_97_5                                                      */
+    /*                                 |                                                                                      */
+    /*      25  0.02525    lower  2.5  |  0.50070      0.0252      0.9752                                                     */
+    /*     975  0.97521    upper 97.5  |                                                                                      */
+    /*                                 |                                                                                      */
+    /**************************************************************************************************************************/
+
+    /*  _                 _   _                             _        _   _ _
+    | || |    _ __  _   _| |_| |__   ___  _ __    ___  __ _| | _ __ | |_(_) | ___  ___
+    | || |_  | `_ \| | | | __| `_ \ / _ \| `_ \  / __|/ _` | || `_ \| __| | |/ _ \/ __|
+    |__   _| | |_) | |_| | |_| | | | (_) | | | | \__ \ (_| | || | | | |_| | |  __/\__ \
+       |_|   | .__/ \__, |\__|_| |_|\___/|_| |_| |___/\__, |_||_| |_|\__|_|_|\___||___/
+             |_|    |___/                                |_|
+    */
+
+    proc datasets lib=sd1 nolist nodetails;
+     delete pywant;
+    run;quit;
+
+    %utl_pybeginx;
+    parmcards4;
+    exec(open('c:/oto/fn_python.py').read());
+    have,meta = ps.read_sas7bdat('d:/sd1/have.sas7bdat');
+    master,meta = ps.read_sas7bdat('d:/sd1/master.sas7bdat');
+    want=pdsql('''                                    \
+      select                                          \
+          case (ntile(0.025*&rows) over (order by x)) \
+            when 1 then 'lower  2.5'                  \
+            when 2 then 'upper 97.5'                  \
+            else ''                                   \
+          end as percentile                           \
+         ,x                                           \
+      from                                            \
+          (select x, row_number() over (order by x) as rownum from have ) \
+      where                                           \
+            rownum = cast((0.025*&rows) as integer)   \
+         or rownum = cast((0.975*&rows) as integer)   \
+       ''');
+    print(want);
+    fn_tosas9x(want,outlib='d:/sd1/',outdsn='pywant',timeest=3);
+    ;;;;
+    %utl_pyendx(resolve=Y);
+
+    proc print data=sd1.pywant;
+    run;quit;
+
+    /**************************************************************************************************************************/
+    /*                                    |                                                                                   */
+    /* PYTHON                             |  SAS UNIVARIATE                                                                   */
+    /*                                    |                                                                                   */
+    /*     rownum   percentile     x      |    avg         p_2_5      p_97_5                                                  */
+    /*                                    |                                                                                   */
+    /*  0      25   lower  2.5  0.025249  |  0.50070      0.0252      0.9752                                                  */
+    /*  1     975   upper 97.5  0.975212  |                                                                                   */
+    /*                                    |                                                                                   */
     /**************************************************************************************************************************/
 
     /*              _
@@ -237,3 +427,4 @@ Calculating quantiles in sas and r default methods differ
      \___|_| |_|\__,_|
 
     */
+
